@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text to Handwriting - Convert Digital Text to Beautiful Handwriting</title>
+    <meta name="description" content="Transform your digital text into beautiful handwritten notes. Free, fast, and easy to use text-to-handwriting converter with multiple styles and PDF generation.">
+    <meta name="keywords" content="text to handwriting, handwriting generator, convert text, digital handwriting, handwritten notes, PDF generator">
+    <meta name="author" content="Nikhil Yadav">
+    
+    <!-- Open Graph Meta Tags -->
+    <meta property="og:title" content="Text to Handwriting Converter">
+    <meta property="og:description" content="Transform your digital text into beautiful handwritten notes with PDF generation">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://yadavnikhil03.github.io/text-to-handwriting">
+    
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✍️</text></svg>">
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Homemade+Apple&family=Caveat:wght@400;600&family=Liu+Jian+Mao+Cao&family=Dancing+Script:wght@400;600&display=swap" rel="stylesheet">
+    
+    <!-- CSS -->
+    <link rel="stylesheet" href="./css/index.css">
+    
+    <!-- PDF Generation Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <nav class="nav">
+                <a href="#" class="logo">
+                    <span class="logo-icon">✍️</span>
+                    <div class="logo-text">
+                        <span class="app-name">Text to Handwriting</span>
+                        <span class="tagline">Convert • Customize • Create</span>
+                    </div>
+                </a>
+                <div class="nav-center">
+                    <div class="user-brand">
+                        <a href="https://github.com/yadavnikhil03" target="_blank" rel="noopener noreferrer" class="github-link" aria-label="Visit Nikhil Yadav's GitHub Profile">
+                            <svg class="github-icon" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.652.242 2.873.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                            </svg>
+                        </a>
+                        <div class="user-info">
+                            <span class="user-name">Nikhil Yadav</span>
+                            <span class="user-title">Full Stack Developer</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="nav-actions">
+                    <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle dark mode" title="Toggle Theme">
+                        <span class="theme-icon" id="themeIcon">🌙</span>
+                    </button>
+                </div>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+        <div class="container">
+            <div class="app-layout">
+                <!-- Input Panel -->
+                <div class="input-panel">
+                    <div class="panel-header">
+                        <h2 class="panel-title">
+                            <span>📝</span>
+                            Input Text
+                        </h2>
+                    </div>
+                    <div class="panel-content">
+                        <!-- Text Input Area -->
+                        <div class="text-input-container">
+                            <div class="paper-background">
+                                <div class="paper-lines" id="paperLines"></div>
+                                <div class="paper-margin" id="paperMargin"></div>
+                                <textarea 
+                                    id="textInput" 
+                                    class="text-input" 
+                                    placeholder="Start typing your text here... It will be converted to handwriting in real-time!"
+                                    spellcheck="false"
+                                >Welcome to the Text to Handwriting Converter!
+
+This tool transforms your digital text into beautiful handwritten notes. You can customize the handwriting style, color, and paper type to match your preferences.
+
+Try changing the settings on the left to see how they affect the output. The conversion happens in real-time as you type!
+
+You can also create multiple pages and generate a single PDF document with all your handwritten content.</textarea>
+                            </div>
+                        </div>
+
+                        <!-- Controls Section -->
+                        <div class="controls-section">
+                            <!-- Handwriting Style -->
+                            <div class="control-group">
+                                <label class="control-label">Handwriting Style</label>
+                                <div class="style-grid">
+                                    <div class="style-option active" data-font="'Homemade Apple', cursive" onclick="selectStyle(this)">
+                                        <div class="style-preview" style="font-family: 'Homemade Apple', cursive;">Aa</div>
+                                        <span class="style-name">Classic</span>
+                                    </div>
+                                    <div class="style-option" data-font="'Caveat', cursive" onclick="selectStyle(this)">
+                                        <div class="style-preview" style="font-family: 'Caveat', cursive;">Aa</div>
+                                        <span class="style-name">Modern</span>
+                                    </div>
+                                    <div class="style-option" data-font="'Liu Jian Mao Cao', cursive" onclick="selectStyle(this)">
+                                        <div class="style-preview" style="font-family: 'Liu Jian Mao Cao', cursive;">Aa</div>
+                                        <span class="style-name">Artistic</span>
+                                    </div>
+                                    <div class="style-option" data-font="'Dancing Script', cursive" onclick="selectStyle(this)">
+                                        <div class="style-preview" style="font-family: 'Dancing Script', cursive;">Aa</div>
+                                        <span class="style-name">Elegant</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Color and Size Controls -->
+                            <div class="controls-row">
+                                <div class="control-group">
+                                    <label class="control-label" for="penColor">Pen Color</label>
+                                    <input type="color" id="penColor" class="color-input" value="#000f55" onchange="updatePreview()">
+                                </div>
+                                <div class="control-group">
+                                    <label class="control-label" for="fontSize">Font Size</label>
+                                    <input type="range" id="fontSize" class="size-input" min="8" max="24" value="14" step="0.5" oninput="updatePreview()">
+                                </div>
+                            </div>
+
+                            <!-- Toggle Controls -->
+                            <div class="toggle-group">
+                                <div class="toggle-item">
+                                    <span class="control-label">Paper Lines</span>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="showLines" checked onchange="updatePreview()">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                                <div class="toggle-item">
+                                    <span class="control-label">Margin</span>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="showMargin" checked onchange="updatePreview()">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Input Stats -->
+                        <div class="input-stats">
+                            <span id="charCount">0 characters</span>
+                            <span id="wordCount">0 words</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Output Panel -->
+                <div class="output-panel">
+                    <div class="panel-header">
+                        <h2 class="panel-title">
+                            <span>🖼️</span>
+                            Handwriting Output
+                        </h2>
+                    </div>
+                    <div class="output-content" id="outputContent">
+                        <canvas id="outputCanvas" class="output-canvas" style="display: none;"></canvas>
+                        <div class="output-placeholder" id="outputPlaceholder">
+                            <div class="placeholder-icon">✍️</div>
+                            <p class="placeholder-text">Your handwriting will appear here</p>
+                            <p class="placeholder-subtext">Start typing to see the magic happen!</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Page Management -->
+                    <div class="page-management">
+                        <div class="page-header">
+                            <span class="page-counter" id="pageCounter">Page 1 of 1</span>
+                            <div class="page-actions">
+                                <button class="btn btn-secondary" onclick="addNewPage()">
+                                    <span>➕</span>
+                                    Add Page
+                                </button>
+                                <button class="btn btn-secondary" onclick="deletePage()" id="deletePageBtn" disabled>
+                                    <span>🗑️</span>
+                                    Delete Page
+                                </button>
+                            </div>
+                        </div>
+                        <div class="page-nav">
+                            <button class="page-nav-btn" onclick="previousPage()" id="prevPageBtn" disabled>‹ Previous</button>
+                            <div class="page-indicator" id="pageIndicator">
+                                <div class="page-dot active"></div>
+                            </div>
+                            <button class="page-nav-btn" onclick="nextPage()" id="nextPageBtn" disabled>Next ›</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Action Buttons -->
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" onclick="downloadImage()" id="downloadBtn" disabled>
+                            <span>📥</span>
+                            Download PNG
+                        </button>
+                        <button class="btn btn-success" onclick="generatePDF()" id="pdfBtn" disabled>
+                            <span>📄</span>
+                            Generate PDF
+                        </button>
+                        <button class="btn btn-secondary" onclick="clearText()">
+                            <span>🗑️</span>
+                            Clear Text
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>
+                Made with ❤️ by <a href="https://github.com/yadavnikhil03" target="_blank" rel="noopener noreferrer">Nikhil Yadav</a> | 
+                <a href="https://github.com/yadavnikhil03/text-to-handwriting" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+            </p>
+        </div>
+    </footer>
+
+    <!-- JavaScript -->
+    <script src="./js/script.js"></script>
+</body>
+</html>
