@@ -28,9 +28,9 @@ A modern web application that transforms your digital text into beautiful handwr
 ## 🚀 Quick Start
 
 1. Clone the repository:
-   \`\`\`bash
+   ```bash
    git clone https://github.com/yadavnikhil03/text-to-handwriting.git
-   \`\`\`
+   ```
 
 2. Open `index.html` in your browser or use a local server:
 
