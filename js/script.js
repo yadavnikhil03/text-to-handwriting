@@ -12,6 +12,7 @@ let currentFont = "'Homemade Apple', cursive"
 let isGenerating = false
 let debounceTimer = null
 let currentPageIndex = 0
+let isInitialLoad = true  // Flag to prevent notifications during initial load
 const pages = [{ text: "", settings: null }]
 
 // DOM Elements
@@ -60,6 +61,11 @@ function initializeApp() {
   pages[0].text = textInput.value
   pages[0].settings = getCurrentSettings()
 
+  // Mark initial load as complete
+  setTimeout(() => {
+    isInitialLoad = false
+  }, 500)
+
   // Run comprehensive test after initialization
   setTimeout(() => {
     runComprehensiveFunctionalityTest()
@@ -74,7 +80,7 @@ function initializeApp() {
 function setupEventListeners() {
   // Text input events
   textInput.addEventListener("input", handleTextInput)
-  textInput.addEventListener("paste", handleTextInput)
+  textInput.addEventListener("paste", handlePasteInput)
 
   // Keyboard shortcuts
   document.addEventListener("keydown", handleKeyboardShortcuts)
@@ -82,18 +88,38 @@ function setupEventListeners() {
   // Window resize
   window.addEventListener("resize", debounce(handleResize, 250))
 
-  // Header scroll effect
+  // Header scroll effect with mobile auto-hide
   let lastScrollY = 0
   let ticking = false
 
   function updateHeader() {
     const header = document.querySelector(".header")
     const scrollY = window.scrollY
+    const isMobile = window.innerWidth <= 480
 
+    // Standard scrolled state for all devices
     if (scrollY > 10) {
       header.classList.add("scrolled")
     } else {
       header.classList.remove("scrolled")
+    }
+
+    // Mobile-specific auto-hide behavior
+    if (isMobile && scrollY > 50) {
+      const scrollDiff = scrollY - lastScrollY
+      
+      if (scrollDiff > 5 && scrollY > 100) {
+        // Scrolling down - hide header
+        header.classList.add("scrolling-down")
+        header.classList.remove("scrolling-up")
+      } else if (scrollDiff < -5) {
+        // Scrolling up - show header
+        header.classList.add("scrolling-up")
+        header.classList.remove("scrolling-down")
+      }
+    } else if (isMobile) {
+      // Always show header when near top or not mobile
+      header.classList.remove("scrolling-down", "scrolling-up")
     }
 
     lastScrollY = scrollY
@@ -114,6 +140,9 @@ function setupEventListeners() {
 // THEME MANAGEMENT
 // ==========================================================================
 
+// Theme switching debounce timer
+let themeToggleTimer = null
+
 /**
  * Toggle between light and dark themes with smooth animation
  */
@@ -121,6 +150,11 @@ function toggleTheme() {
   const body = document.body
   const themeToggle = document.querySelector(".theme-toggle")
   const isDark = body.getAttribute("data-theme") === "dark"
+
+  // Prevent rapid clicking
+  if (themeToggle.classList.contains("switching")) {
+    return
+  }
 
   // Add switching animation
   themeToggle.classList.add("switching")
@@ -150,7 +184,14 @@ function toggleTheme() {
     // Regenerate canvas with new theme
     setTimeout(updatePreview, 100)
 
-    showNotification(`Switched to ${isDark ? "light" : "dark"} mode`, "success")
+    // Debounced notification to prevent spam
+    clearTimeout(themeToggleTimer)
+    themeToggleTimer = setTimeout(() => {
+      // Only show notification if not during initial load
+      if (!isInitialLoad) {
+        showNotification(`Switched to ${isDark ? "light" : "dark"} mode`, "success")
+      }
+    }, 300)
   }, 150)
 }
 
@@ -160,11 +201,33 @@ function toggleTheme() {
 function loadSavedTheme() {
   const savedTheme = localStorage.getItem("theme")
   const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches
+  const body = document.body
+
+  // Prevent any transitions during theme loading
+  body.style.transition = "none"
 
   if (savedTheme === "dark" || (!savedTheme && prefersDark)) {
-    document.body.setAttribute("data-theme", "dark")
+    // Apply dark theme
+    body.setAttribute("data-theme", "dark")
     themeIcon.textContent = "☀️"
+    // Save the preference if it wasn't already saved
+    if (!savedTheme) {
+      localStorage.setItem("theme", "dark")
+    }
+  } else {
+    // Apply light theme (default or explicitly saved)
+    body.removeAttribute("data-theme")
+    themeIcon.textContent = "🌙"
+    // Save the preference if it wasn't already saved
+    if (!savedTheme) {
+      localStorage.setItem("theme", "light")
+    }
   }
+
+  // Re-enable transitions after a brief delay
+  setTimeout(() => {
+    body.style.transition = ""
+  }, 100)
 }
 
 // ==========================================================================
@@ -412,6 +475,149 @@ function clearText() {
   showNotification("Text cleared", "info")
 }
 
+/**
+ * Handle paste input with auto-pagination
+ */
+function handlePasteInput(event) {
+  // Let the default paste happen first
+  setTimeout(() => {
+    const fullText = textInput.value
+    
+    // Check if text overflows current page
+    if (doesTextOverflow(fullText)) {
+      handleTextOverflow(fullText)
+    } else {
+      // Normal text input handling
+      handleTextInput()
+    }
+  }, 10)
+}
+
+/**
+ * Check if text overflows the current page capacity
+ * @param {string} text - Text to check
+ * @returns {boolean} - True if text overflows
+ */
+function doesTextOverflow(text) {
+  const pageCapacity = calculatePageCapacity()
+  return text.length > pageCapacity
+}
+
+/**
+ * Calculate approximate character capacity per page
+ * @returns {number} - Character capacity
+ */
+function calculatePageCapacity() {
+  const fontSize = Number.parseInt(document.getElementById("fontSize").value)
+  const showLines = document.getElementById("showLines").checked
+  const showMargin = document.getElementById("showMargin").checked
+  
+  // Get canvas dimensions (approximating based on standard page)
+  const canvasWidth = 800 // Approximate canvas width
+  const canvasHeight = 600 // Approximate canvas height
+  
+  // Calculate usable area
+  const marginOffset = showMargin ? 60 : 20
+  const usableWidth = canvasWidth - marginOffset - 40 // Account for padding
+  const usableHeight = canvasHeight - 40 // Account for top/bottom padding
+  
+  // Calculate lines per page
+  const lineHeight = fontSize * 1.5 // Standard line height multiplier
+  const linesPerPage = Math.floor(usableHeight / lineHeight)
+  
+  // Calculate characters per line (approximate)
+  const avgCharWidth = fontSize * 0.6 // Approximate character width
+  const charsPerLine = Math.floor(usableWidth / avgCharWidth)
+  
+  // Total capacity with some safety margin
+  return Math.floor(linesPerPage * charsPerLine * 0.85) // 15% safety margin
+}
+
+/**
+ * Handle text overflow by splitting across multiple pages
+ * @param {string} fullText - The full text to be distributed
+ */
+function handleTextOverflow(fullText) {
+  const pageCapacity = calculatePageCapacity()
+  
+  // Save current page first
+  saveCurrentPage()
+  
+  // Split text into chunks that fit on pages
+  const textChunks = splitTextIntoPages(fullText, pageCapacity)
+  
+  // Clear current page and set first chunk
+  textInput.value = textChunks[0]
+  pages[currentPageIndex].text = textChunks[0]
+  
+  // Create new pages for remaining chunks
+  let newPagesCount = 0
+  for (let i = 1; i < textChunks.length; i++) {
+    // Add new page
+    pages.push({
+      text: textChunks[i],
+      settings: getCurrentSettings(),
+    })
+    newPagesCount++
+  }
+  
+  // Update UI
+  updateCharacterCount()
+  updatePreview()
+  updatePageUI()
+  
+  // Show notification about auto-pagination
+  if (newPagesCount > 0) {
+    showNotification(`Text split across ${textChunks.length} pages (${newPagesCount} new pages created)`, "success")
+  }
+}
+
+/**
+ * Split text into page-sized chunks
+ * @param {string} text - Text to split
+ * @param {number} pageCapacity - Characters per page
+ * @returns {string[]} - Array of text chunks
+ */
+function splitTextIntoPages(text, pageCapacity) {
+  const chunks = []
+  let remainingText = text
+  
+  while (remainingText.length > 0) {
+    if (remainingText.length <= pageCapacity) {
+      // Last chunk fits entirely
+      chunks.push(remainingText)
+      break
+    }
+    
+    // Find a good break point (end of sentence, paragraph, or word)
+    let breakPoint = pageCapacity
+    
+    // Try to break at paragraph
+    let paragraphBreak = remainingText.lastIndexOf('\n\n', pageCapacity)
+    if (paragraphBreak > pageCapacity * 0.7) {
+      breakPoint = paragraphBreak + 2
+    } else {
+      // Try to break at sentence
+      let sentenceBreak = remainingText.lastIndexOf('. ', pageCapacity)
+      if (sentenceBreak > pageCapacity * 0.7) {
+        breakPoint = sentenceBreak + 2
+      } else {
+        // Try to break at word
+        let wordBreak = remainingText.lastIndexOf(' ', pageCapacity)
+        if (wordBreak > pageCapacity * 0.8) {
+          breakPoint = wordBreak + 1
+        }
+      }
+    }
+    
+    // Extract chunk and continue with remaining text
+    chunks.push(remainingText.substring(0, breakPoint).trim())
+    remainingText = remainingText.substring(breakPoint).trim()
+  }
+  
+  return chunks
+}
+
 // ==========================================================================
 // STYLE SELECTION
 // ==========================================================================
@@ -455,21 +661,28 @@ function setupCanvas() {
   const container = outputCanvas.parentElement
   const containerRect = container.getBoundingClientRect()
 
-  // Set canvas size based on container
-  const width = Math.min(800, containerRect.width - 48)
-  const height = Math.min(600, containerRect.height - 48)
+  // Set canvas size based on container with higher base resolution
+  const width = Math.min(1200, containerRect.width - 48)
+  const height = Math.min(900, containerRect.height - 48)
 
-  // Set actual canvas size (for high DPI displays)
-  const dpr = window.devicePixelRatio || 1
-  outputCanvas.width = width * dpr
-  outputCanvas.height = height * dpr
+  // Use higher DPI scaling for better quality
+  const dpr = Math.max(2, window.devicePixelRatio || 1) // Minimum 2x scaling
+  const scaleFactor = 3 // Additional scaling for premium quality
+  
+  outputCanvas.width = width * dpr * scaleFactor
+  outputCanvas.height = height * dpr * scaleFactor
 
   // Set display size
   outputCanvas.style.width = width + "px"
   outputCanvas.style.height = height + "px"
 
-  // Scale context for high DPI
-  ctx.scale(dpr, dpr)
+  // Scale context for high DPI and quality
+  ctx.scale(dpr * scaleFactor, dpr * scaleFactor)
+  
+  // Enable high-quality rendering
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+  ctx.textRenderingOptimization = 'optimizeQuality'
 }
 
 /**
@@ -513,9 +726,8 @@ function generateHandwriting(text) {
   const canvasWidth = Number.parseInt(outputCanvas.style.width)
   const canvasHeight = Number.parseInt(outputCanvas.style.height)
 
-  // Set background - always white for paper (even in dark mode)
-  ctx.fillStyle = "#ffffff"
-  ctx.fillRect(0, 0, canvasWidth, canvasHeight)
+  // Create realistic paper background
+  createRealisticPaperBackground(canvasWidth, canvasHeight)
 
   // Draw paper lines if enabled
   if (showLines) {
@@ -527,16 +739,70 @@ function generateHandwriting(text) {
     drawMargin(canvasHeight)
   }
 
-  // Set text properties
+  // Set text properties with handwriting effects
   ctx.font = `${fontSize}px ${currentFont.replace(/'/g, "")}`
   ctx.fillStyle = penColor
   ctx.textBaseline = "top"
 
-  // Draw text
-  drawText(text, fontSize, showMargin, canvasWidth, canvasHeight)
+  // Draw text with realistic handwriting effects
+  drawRealisticText(text, fontSize, showMargin, canvasWidth, canvasHeight, penColor)
 
   // Enable download buttons
   downloadBtn.disabled = false
+}
+
+/**
+ * Create a realistic paper background with aging effects
+ * @param {number} width - Canvas width
+ * @param {number} height - Canvas height
+ */
+function createRealisticPaperBackground(width, height) {
+  // Base paper color (very subtle off-white, not yellow)
+  const baseColor = '#fefefe'
+  ctx.fillStyle = baseColor
+  ctx.fillRect(0, 0, width, height)
+
+  // Add subtle texture with optimized performance
+  const imageData = ctx.getImageData(0, 0, width, height)
+  const data = imageData.data
+
+  // Sample every few pixels for performance while maintaining quality
+  const step = 1 // Sample every pixel for best quality
+  
+  for (let i = 0; i < data.length; i += 4 * step) {
+    const pixelIndex = i / 4
+    const x = pixelIndex % width
+    const y = Math.floor(pixelIndex / width)
+    
+    // Skip if outside bounds
+    if (x >= width || y >= height) continue
+    
+    // Add fine paper fiber texture
+    const fiberNoise = (Math.random() - 0.5) * 2
+    
+    // Very subtle aging (much less yellow)
+    const agingFactor = Math.random() * 0.05
+    const subtleTint = Math.sin(x * 0.008) * Math.sin(y * 0.008) * 3
+    
+    // Apply effects to current pixel and adjacent pixels for smooth blending
+    for (let offset = 0; offset < step * 4 && i + offset < data.length; offset += 4) {
+      // Apply minimal effects to RGB values
+      data[i + offset] = Math.min(255, Math.max(248, data[i + offset] + fiberNoise - agingFactor * 2 + subtleTint)) // Red
+      data[i + offset + 1] = Math.min(255, Math.max(248, data[i + offset + 1] + fiberNoise - agingFactor * 1 + subtleTint * 0.9)) // Green  
+      data[i + offset + 2] = Math.min(255, Math.max(248, data[i + offset + 2] + fiberNoise - agingFactor * 2 + subtleTint * 0.8)) // Blue
+    }
+  }
+
+  // Apply the texture
+  ctx.putImageData(imageData, 0, 0)
+
+  // Add very subtle gradient for paper depth
+  const gradient = ctx.createRadialGradient(width/2, height/2, 0, width/2, height/2, Math.max(width, height)/2)
+  gradient.addColorStop(0, 'rgba(255, 255, 255, 0)')
+  gradient.addColorStop(1, 'rgba(248, 248, 248, 0.005)')
+  
+  ctx.fillStyle = gradient
+  ctx.fillRect(0, 0, width, height)
 }
 
 /**
@@ -545,14 +811,36 @@ function generateHandwriting(text) {
  * @param {number} height \
  */
 function drawPaperLines(width, height) {
-  ctx.strokeStyle = "#e5e7eb" 
-  ctx.lineWidth = 1
+  // More realistic paper line color (slightly faded blue)
+  ctx.strokeStyle = "#b8c5d6" 
+  ctx.lineWidth = 0.8
 
   const lineSpacing = 30
   for (let y = 50; y < height; y += lineSpacing) {
     ctx.beginPath()
-    ctx.moveTo(0, y)
-    ctx.lineTo(width, y)
+    
+    // Add slight variation to line position for realism
+    const lineVariation = (Math.random() - 0.5) * 0.5
+    const actualY = y + lineVariation
+    
+    // Draw line with slight imperfections
+    ctx.moveTo(0, actualY)
+    
+    // Add subtle curve to simulate paper imperfections
+    const segments = 8
+    const segmentWidth = width / segments
+    
+    for (let i = 1; i <= segments; i++) {
+      const x = i * segmentWidth
+      const yOffset = (Math.random() - 0.5) * 0.3
+      
+      if (i === segments) {
+        ctx.lineTo(width, actualY + yOffset)
+      } else {
+        ctx.lineTo(x, actualY + yOffset)
+      }
+    }
+    
     ctx.stroke()
   }
 }
@@ -562,12 +850,216 @@ function drawPaperLines(width, height) {
  * @param {number} height - Canvas height
  */
 function drawMargin(height) {
-  ctx.strokeStyle = "#fca5a5" 
-  ctx.lineWidth = 2
+  // More realistic margin color (faded red/pink)
+  ctx.strokeStyle = "#e8a5a5" 
+  ctx.lineWidth = 1.5
+  
   ctx.beginPath()
+  
+  // Add slight variation to margin line
+  const segments = 10
+  const segmentHeight = height / segments
+  
   ctx.moveTo(60, 0)
-  ctx.lineTo(60, height)
+  
+  for (let i = 1; i <= segments; i++) {
+    const y = i * segmentHeight
+    const xOffset = (Math.random() - 0.5) * 0.8
+    
+    if (i === segments) {
+      ctx.lineTo(60 + xOffset, height)
+    } else {
+      ctx.lineTo(60 + xOffset, y)
+    }
+  }
+  
   ctx.stroke()
+}
+
+/**
+ * Draw text with realistic handwriting effects
+ * @param {string} text - Text to draw
+ * @param {number} fontSize - Font size
+ * @param {boolean} showMargin - Whether margin is shown
+ * @param {number} canvasWidth - Canvas width
+ * @param {number} canvasHeight - Canvas height
+ * @param {string} penColor - Pen color
+ */
+function drawRealisticText(text, fontSize, showMargin, canvasWidth, canvasHeight, penColor) {
+  const lines = text.split("\n")
+  const lineHeight = fontSize * 1.8
+  const startX = showMargin ? 80 : 20
+  const maxWidth = canvasWidth - startX - 20
+  let currentY = 60
+
+  // Create realistic pen variations
+  const baseAlpha = 0.85 + Math.random() * 0.15 // Slight ink variation
+
+  lines.forEach((line, lineIndex) => {
+    if (line.trim() === "") {
+      currentY += lineHeight
+      return
+    }
+
+    const words = line.split(" ")
+    let currentLine = ""
+    let lineWords = []
+
+    // Group words into lines
+    words.forEach((word) => {
+      const testLine = currentLine + word + " "
+      ctx.font = `${fontSize}px ${currentFont.replace(/'/g, "")}`
+      const metrics = ctx.measureText(testLine)
+
+      if (metrics.width > maxWidth && currentLine !== "") {
+        lineWords.push(currentLine.trim())
+        currentLine = word + " "
+      } else {
+        currentLine = testLine
+      }
+    })
+
+    if (currentLine.trim() !== "") {
+      lineWords.push(currentLine.trim())
+    }
+
+    // Draw each line with realistic effects
+    lineWords.forEach((lineText, wordLineIndex) => {
+      if (currentY > canvasHeight - 40) return
+
+      drawLineWithInkEffects(lineText, startX, currentY, fontSize, penColor, baseAlpha)
+      currentY += lineHeight
+    })
+  })
+}
+
+/**
+ * Draw a line of text with realistic ink effects
+ * @param {string} text - Text to draw
+ * @param {number} x - X position
+ * @param {number} y - Y position
+ * @param {number} fontSize - Font size
+ * @param {string} penColor - Pen color
+ * @param {number} baseAlpha - Base alpha for ink variations
+ */
+function drawLineWithInkEffects(text, x, y, fontSize, penColor, baseAlpha) {
+  // Split into characters for individual character effects
+  const characters = text.split('')
+  let currentX = x
+  
+  characters.forEach((char, index) => {
+    if (char === ' ') {
+      // Handle spaces
+      ctx.font = `${fontSize}px ${currentFont.replace(/'/g, "")}`
+      const spaceWidth = ctx.measureText(' ').width
+      currentX += spaceWidth
+      return
+    }
+
+    // Create subtle variations for each character (reduced for better quality)
+    const charVariation = {
+      xOffset: (Math.random() - 0.5) * 0.3, // Reduced from 0.8
+      yOffset: (Math.random() - 0.5) * 0.5, // Reduced from 1.2
+      scaleX: 0.98 + Math.random() * 0.04, // Reduced from 0.1
+      scaleY: 0.98 + Math.random() * 0.04, // Reduced from 0.1
+      rotation: (Math.random() - 0.5) * 0.008, // Reduced from 0.02
+      alpha: baseAlpha + (Math.random() - 0.5) * 0.05 // Reduced from 0.1
+    }
+
+    // Apply character variations
+    ctx.save()
+    
+    // Set alpha for ink variation
+    ctx.globalAlpha = Math.max(0.85, Math.min(1, charVariation.alpha))
+    
+    // Translate to character position
+    ctx.translate(currentX + charVariation.xOffset, y + charVariation.yOffset)
+    
+    // Apply rotation and scaling
+    ctx.rotate(charVariation.rotation)
+    ctx.scale(charVariation.scaleX, charVariation.scaleY)
+    
+    // Set font and color with minimal variations
+    const adjustedFontSize = fontSize * (0.99 + Math.random() * 0.02) // Reduced from 0.04
+    ctx.font = `${adjustedFontSize}px ${currentFont.replace(/'/g, "")}`
+    
+    // Add minimal color variation for realistic ink
+    const inkVariation = addSubtleInkColorVariation(penColor)
+    ctx.fillStyle = inkVariation
+    ctx.textBaseline = "top"
+    
+    // Draw the character
+    ctx.fillText(char, 0, 0)
+    
+    ctx.restore()
+
+    // Move to next character position
+    ctx.font = `${fontSize}px ${currentFont.replace(/'/g, "")}`
+    const charWidth = ctx.measureText(char).width
+    currentX += charWidth * charVariation.scaleX
+  })
+}
+
+/**
+ * Add subtle color variation to simulate real ink (less variation for better quality)
+ * @param {string} baseColor - Base pen color
+ * @returns {string} Varied color
+ */
+function addSubtleInkColorVariation(baseColor) {
+  // Convert hex to RGB if needed
+  let r, g, b
+  
+  if (baseColor.startsWith('#')) {
+    const hex = baseColor.slice(1)
+    r = parseInt(hex.slice(0, 2), 16)
+    g = parseInt(hex.slice(2, 4), 16)
+    b = parseInt(hex.slice(4, 6), 16)
+  } else if (baseColor.startsWith('rgb')) {
+    const matches = baseColor.match(/\d+/g)
+    r = parseInt(matches[0])
+    g = parseInt(matches[1])
+    b = parseInt(matches[2])
+  } else {
+    return baseColor // Return original if can't parse
+  }
+
+  // Add very subtle random variation (±2 for each channel, reduced from ±5)
+  r = Math.max(0, Math.min(255, r + (Math.random() - 0.5) * 4))
+  g = Math.max(0, Math.min(255, g + (Math.random() - 0.5) * 4))
+  b = Math.max(0, Math.min(255, b + (Math.random() - 0.5) * 4))
+
+  return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`
+}
+
+/**
+ * Add slight color variation to simulate real ink
+ * @param {string} baseColor - Base pen color
+ * @returns {string} Varied color
+ */
+function addInkColorVariation(baseColor) {
+  // Convert hex to RGB if needed
+  let r, g, b
+  
+  if (baseColor.startsWith('#')) {
+    const hex = baseColor.slice(1)
+    r = parseInt(hex.slice(0, 2), 16)
+    g = parseInt(hex.slice(2, 4), 16)
+    b = parseInt(hex.slice(4, 6), 16)
+  } else if (baseColor.startsWith('rgb')) {
+    const matches = baseColor.match(/\d+/g)
+    r = parseInt(matches[0])
+    g = parseInt(matches[1])
+    b = parseInt(matches[2])
+  } else {
+    return baseColor // Return original if can't parse
+  }
+
+  // Add slight random variation (±5 for each channel)
+  r = Math.max(0, Math.min(255, r + (Math.random() - 0.5) * 10))
+  g = Math.max(0, Math.min(255, g + (Math.random() - 0.5) * 10))
+  b = Math.max(0, Math.min(255, b + (Math.random() - 0.5) * 10))
+
+  return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`
 }
 
 /**
@@ -749,44 +1241,39 @@ async function generatePDF() {
  */
 async function generatePageCanvas(page) {
   return new Promise((resolve) => {
-    // Create temporary canvas
+    // Create temporary canvas with higher resolution for PDF
     const tempCanvas = document.createElement("canvas")
     const tempCtx = tempCanvas.getContext("2d")
 
-    // Set canvas size (A4 proportions)
-    const width = 800
-    const height = 1131 // A4 ratio
+    // Set canvas size (A4 proportions) with higher resolution
+    const scaleFactor = 4 // 4x resolution for high-quality PDF
+    const width = 800 * scaleFactor
+    const height = 1131 * scaleFactor // A4 ratio
     tempCanvas.width = width
     tempCanvas.height = height
 
-    // Set background - always white for PDF
-    tempCtx.fillStyle = "#ffffff"
-    tempCtx.fillRect(0, 0, width, height)
+    // Enable high-quality rendering
+    tempCtx.imageSmoothingEnabled = true
+    tempCtx.imageSmoothingQuality = 'high'
+    tempCtx.textRenderingOptimization = 'optimizeQuality'
+
+    // Scale context for high-quality rendering
+    tempCtx.scale(scaleFactor, scaleFactor)
+
+    // Create realistic paper background for PDF
+    createRealisticPaperBackgroundForCanvas(tempCtx, width/scaleFactor, height/scaleFactor)
 
     // Apply page settings
     const settings = page.settings || getCurrentSettings()
 
-    // Draw paper lines if enabled
+    // Draw paper lines if enabled with realistic styling
     if (settings.showLines) {
-      tempCtx.strokeStyle = "#e5e7eb"
-      tempCtx.lineWidth = 1
-      const lineSpacing = 30
-      for (let y = 50; y < height; y += lineSpacing) {
-        tempCtx.beginPath()
-        tempCtx.moveTo(0, y)
-        tempCtx.lineTo(width, y)
-        tempCtx.stroke()
-      }
+      drawRealisticPaperLinesForCanvas(tempCtx, width/scaleFactor, height/scaleFactor)
     }
 
-    // Draw margin if enabled
+    // Draw margin if enabled with realistic styling
     if (settings.showMargin) {
-      tempCtx.strokeStyle = "#fca5a5"
-      tempCtx.lineWidth = 2
-      tempCtx.beginPath()
-      tempCtx.moveTo(60, 0)
-      tempCtx.lineTo(60, height)
-      tempCtx.stroke()
+      drawRealisticMarginForCanvas(tempCtx, height/scaleFactor)
     }
 
     // Set text properties
@@ -794,45 +1281,8 @@ async function generatePageCanvas(page) {
     tempCtx.fillStyle = settings.penColor
     tempCtx.textBaseline = "top"
 
-    // Draw text
-    const lines = page.text.split("\n")
-    const lineHeight = Number.parseInt(settings.fontSize) * 1.8
-    const startX = settings.showMargin ? 80 : 20
-    const maxWidth = width - startX - 20
-    let currentY = 60
-
-    lines.forEach((line) => {
-      if (line.trim() === "") {
-        currentY += lineHeight
-        return
-      }
-
-      const words = line.split(" ")
-      let currentLine = ""
-
-      words.forEach((word) => {
-        const testLine = currentLine + word + " "
-        const metrics = tempCtx.measureText(testLine)
-
-        if (metrics.width > maxWidth && currentLine !== "") {
-          tempCtx.fillText(currentLine.trim(), startX, currentY)
-          currentLine = word + " "
-          currentY += lineHeight
-
-          if (currentY > height - 40) {
-            return
-          }
-        } else {
-          currentLine = testLine
-        }
-      })
-
-      if (currentLine.trim() !== "" && currentY <= height - 40) {
-        tempCtx.fillText(currentLine.trim(), startX, currentY)
-      }
-
-      currentY += lineHeight
-    })
+    // Draw text with realistic effects
+    drawRealisticTextForCanvas(tempCtx, page.text, settings, width, height)
 
     resolve(tempCanvas)
   })
@@ -921,85 +1371,50 @@ function handleKeyboardShortcuts(event) {
 }
 
 /**
- * Show notification to user
+ * Show minimal notification to user
  * @param {string} message - Notification message
  * @param {string} type - Notification type (success, error, info, warning)
  */
 function showNotification(message, type = "info") {
-  // Remove existing notifications
-  const existingNotifications = document.querySelectorAll(".notification")
-  existingNotifications.forEach((notification) => notification.remove())
-
-  // Create notification element
-  const notification = document.createElement("div")
-  notification.className = `notification notification-${type}`
-
-  // Set notification content
-  const icons = {
-    success: "✅",
-    error: "❌",
-    warning: "⚠️",
-    info: "ℹ️",
+  // Don't show notifications during initial load
+  if (isInitialLoad) {
+    return
   }
 
-  notification.innerHTML = `
-        <div style="
-            display: flex;
-            align-items: center;
-            gap: var(--space-2);
-            padding: var(--space-3) var(--space-4);
-            background: var(--bg-elevated);
-            border: 1px solid var(--border-primary);
-            border-radius: var(--radius-md);
-            box-shadow: var(--shadow-lg);
-            color: var(--text-primary);
-            font-size: 0.875rem;
-            max-width: 400px;
-        ">
-            <span>${icons[type] || icons.info}</span>
-            <span>${message}</span>
-            <button onclick="this.parentElement.parentElement.remove()" style="
-                background: none;
-                border: none;
-                color: var(--text-secondary);
-                cursor: pointer;
-                font-size: 1.2rem;
-                margin-left: auto;
-                padding: 0;
-            ">×</button>
-        </div>
-    `
-
-  // Style notification
-  notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        z-index: 10000;
-        animation: slideInRight 0.3s ease-out;
-    `
-
-  // Add type-specific styling
-  const colors = {
-    success: "var(--color-success)",
-    error: "var(--color-error)",
-    warning: "var(--color-warning)",
-    info: "var(--color-primary)",
-  }
-
-  notification.querySelector("div").style.borderLeftColor = colors[type] || colors.info
-  notification.querySelector("div").style.borderLeftWidth = "4px"
-
-  // Add to DOM
-  document.body.appendChild(notification)
-
-  // Auto remove after 5 seconds
+  // Remove existing toasts
+  const existingToasts = document.querySelectorAll(".toast")
+  existingToasts.forEach(toast => {
+    toast.style.animation = "toast-slide-out 0.2s ease-in"
+    setTimeout(() => toast.remove(), 200)
+  })
+  
+  // Wait for removal, then show new toast
   setTimeout(() => {
-    if (notification.parentElement) {
-      notification.style.animation = "slideOutRight 0.3s ease-out"
-      setTimeout(() => notification.remove(), 300)
+    const toast = document.createElement("div")
+    toast.className = `toast toast-${type}`
+    
+    const icons = {
+      success: "✓",
+      error: "✕",
+      warning: "⚠",
+      info: "i"
     }
-  }, 5000)
+    
+    toast.innerHTML = `
+      <span class="toast-icon">${icons[type] || icons.info}</span>
+      <span class="toast-message">${message}</span>
+    `
+    
+    document.body.appendChild(toast)
+    
+    // Auto remove after 3 seconds
+    setTimeout(() => {
+      if (toast.parentElement) {
+        toast.style.animation = "toast-slide-out 0.2s ease-in"
+        setTimeout(() => toast.remove(), 200)
+      }
+    }, 3000)
+  }, 50)
 }
 
 // ==========================================================================
@@ -1042,10 +1457,11 @@ function runComprehensiveFunctionalityTest() {
 
   console.log(`\n📊 Test Results: ${passedTests}/${totalTests} tests passed`)
 
+  // Log results to console only (no notifications for end users)
   if (passedTests === totalTests) {
-    showNotification("All functionality tests passed! 🎉", "success")
+    console.log("✅ All functionality tests passed!")
   } else {
-    showNotification(`${totalTests - passedTests} tests failed. Check console for details.`, "warning")
+    console.log(`⚠️ ${totalTests - passedTests} tests failed. Check console for details.`)
   }
 }
 
@@ -1192,6 +1608,200 @@ function testResponsiveDesign() {
   const hasViewport = viewport && viewport.content.includes("width=device-width")
 
   return hasResponsiveStyles && hasViewport
+}
+
+// ==========================================================================
+// PDF GENERATION HELPER FUNCTIONS
+// ==========================================================================
+
+/**
+ * Create realistic paper background for PDF canvas
+ * @param {CanvasRenderingContext2D} context - Canvas context
+ * @param {number} width - Canvas width
+ * @param {number} height - Canvas height
+ */
+function createRealisticPaperBackgroundForCanvas(context, width, height) {
+  // Base paper color (subtle off-white, not yellow)
+  const baseColor = '#fefefe'
+  context.fillStyle = baseColor
+  context.fillRect(0, 0, width, height)
+
+  // Add subtle texture with high quality
+  const imageData = context.getImageData(0, 0, width, height)
+  const data = imageData.data
+
+  // Add fine paper texture
+  for (let i = 0; i < data.length; i += 4) {
+    const x = (i / 4) % width
+    const y = Math.floor((i / 4) / width)
+    
+    // Add fine paper fiber texture
+    const fiberNoise = (Math.random() - 0.5) * 2
+    
+    // Very minimal aging for professional look
+    const agingFactor = Math.random() * 0.05
+    const subtleTint = Math.sin(x * 0.01) * Math.sin(y * 0.01) * 2
+    
+    // Apply minimal effects to RGB values
+    data[i] = Math.min(255, Math.max(245, data[i] + fiberNoise - agingFactor * 2 + subtleTint)) // Red
+    data[i + 1] = Math.min(255, Math.max(245, data[i + 1] + fiberNoise - agingFactor * 1 + subtleTint * 0.9)) // Green  
+    data[i + 2] = Math.min(255, Math.max(245, data[i + 2] + fiberNoise - agingFactor * 3 + subtleTint * 0.8)) // Blue
+  }
+
+  // Apply the texture
+  context.putImageData(imageData, 0, 0)
+
+  // Add very subtle gradient for paper depth
+  const gradient = context.createRadialGradient(width/2, height/2, 0, width/2, height/2, Math.max(width, height)/2)
+  gradient.addColorStop(0, 'rgba(255, 255, 255, 0)')
+  gradient.addColorStop(1, 'rgba(245, 245, 245, 0.005)')
+  
+  context.fillStyle = gradient
+  context.fillRect(0, 0, width, height)
+}
+
+/**
+ * Draw realistic paper lines for PDF
+ * @param {CanvasRenderingContext2D} context - Canvas context
+ * @param {number} width - Canvas width
+ * @param {number} height - Canvas height
+ */
+function drawRealisticPaperLinesForCanvas(context, width, height) {
+  context.strokeStyle = "#b8c5d6"
+  context.lineWidth = 0.8
+
+  const lineSpacing = 30
+  for (let y = 50; y < height; y += lineSpacing) {
+    context.beginPath()
+    
+    const lineVariation = (Math.random() - 0.5) * 0.3
+    const actualY = y + lineVariation
+    
+    context.moveTo(0, actualY)
+    
+    const segments = 8
+    const segmentWidth = width / segments
+    
+    for (let i = 1; i <= segments; i++) {
+      const x = i * segmentWidth
+      const yOffset = (Math.random() - 0.5) * 0.2
+      
+      if (i === segments) {
+        context.lineTo(width, actualY + yOffset)
+      } else {
+        context.lineTo(x, actualY + yOffset)
+      }
+    }
+    
+    context.stroke()
+  }
+}
+
+/**
+ * Draw realistic margin for PDF
+ * @param {CanvasRenderingContext2D} context - Canvas context
+ * @param {number} height - Canvas height
+ */
+function drawRealisticMarginForCanvas(context, height) {
+  context.strokeStyle = "#e8a5a5"
+  context.lineWidth = 1.5
+  
+  context.beginPath()
+  
+  const segments = 10
+  const segmentHeight = height / segments
+  
+  context.moveTo(60, 0)
+  
+  for (let i = 1; i <= segments; i++) {
+    const y = i * segmentHeight
+    const xOffset = (Math.random() - 0.5) * 0.6
+    
+    if (i === segments) {
+      context.lineTo(60 + xOffset, height)
+    } else {
+      context.lineTo(60 + xOffset, y)
+    }
+  }
+  
+  context.stroke()
+}
+
+/**
+ * Draw realistic text for PDF canvas
+ * @param {CanvasRenderingContext2D} context - Canvas context
+ * @param {string} text - Text to draw
+ * @param {Object} settings - Text settings
+ * @param {number} width - Canvas width
+ * @param {number} height - Canvas height
+ */
+function drawRealisticTextForCanvas(context, text, settings, width, height) {
+  const lines = text.split("\n")
+  const lineHeight = Number.parseInt(settings.fontSize) * 1.8
+  const startX = settings.showMargin ? 80 : 20
+  const maxWidth = width - startX - 20
+  let currentY = 60
+
+  lines.forEach((line) => {
+    if (line.trim() === "") {
+      currentY += lineHeight
+      return
+    }
+
+    const words = line.split(" ")
+    let currentLine = ""
+
+    words.forEach((word) => {
+      const testLine = currentLine + word + " "
+      context.font = `${settings.fontSize}px ${settings.font.replace(/'/g, "")}`
+      const metrics = context.measureText(testLine)
+
+      if (metrics.width > maxWidth && currentLine !== "") {
+        // Draw with slight variations
+        drawTextWithVariationsForPDF(context, currentLine.trim(), startX, currentY, settings)
+        currentLine = word + " "
+        currentY += lineHeight
+
+        if (currentY > height - 40) {
+          return
+        }
+      } else {
+        currentLine = testLine
+      }
+    })
+
+    if (currentLine.trim() !== "" && currentY <= height - 40) {
+      drawTextWithVariationsForPDF(context, currentLine.trim(), startX, currentY, settings)
+    }
+
+    currentY += lineHeight
+  })
+}
+
+/**
+ * Draw text with subtle variations for PDF
+ * @param {CanvasRenderingContext2D} context - Canvas context
+ * @param {string} text - Text to draw
+ * @param {number} x - X position
+ * @param {number} y - Y position
+ * @param {Object} settings - Text settings
+ */
+function drawTextWithVariationsForPDF(context, text, x, y, settings) {
+  context.save()
+  
+  // Add subtle randomness
+  const xOffset = (Math.random() - 0.5) * 0.3
+  const yOffset = (Math.random() - 0.5) * 0.8
+  
+  context.translate(xOffset, yOffset)
+  
+  // Slight color variation
+  context.fillStyle = addInkColorVariation(settings.penColor)
+  context.globalAlpha = 0.85 + Math.random() * 0.15
+  
+  context.fillText(text, x, y)
+  
+  context.restore()
 }
 
 // ==========================================================================
