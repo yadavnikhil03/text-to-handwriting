@@ -476,146 +476,245 @@ function clearText() {
 }
 
 /**
- * Handle paste input with auto-pagination
+ * Handle paste input with robust auto-pagination
  */
 function handlePasteInput(event) {
   // Let the default paste happen first
   setTimeout(() => {
     const fullText = textInput.value
     
-    // Check if text overflows current page
-    if (doesTextOverflow(fullText)) {
-      handleTextOverflow(fullText)
+    // Always check if text needs auto-pagination
+    if (fullText.trim().length > 0) {
+      handleRobustTextDistribution(fullText)
     } else {
-      // Normal text input handling
       handleTextInput()
     }
   }, 10)
 }
 
 /**
- * Check if text overflows the current page capacity
- * @param {string} text - Text to check
- * @returns {boolean} - True if text overflows
+ * Robust text distribution across multiple pages
+ * @param {string} fullText - The complete text to distribute
  */
-function doesTextOverflow(text) {
-  const pageCapacity = calculatePageCapacity()
-  return text.length > pageCapacity
-}
-
-/**
- * Calculate approximate character capacity per page
- * @returns {number} - Character capacity
- */
-function calculatePageCapacity() {
-  const fontSize = Number.parseInt(document.getElementById("fontSize").value)
-  const showLines = document.getElementById("showLines").checked
-  const showMargin = document.getElementById("showMargin").checked
-  
-  // Get canvas dimensions (approximating based on standard page)
-  const canvasWidth = 800 // Approximate canvas width
-  const canvasHeight = 600 // Approximate canvas height
-  
-  // Calculate usable area
-  const marginOffset = showMargin ? 60 : 20
-  const usableWidth = canvasWidth - marginOffset - 40 // Account for padding
-  const usableHeight = canvasHeight - 40 // Account for top/bottom padding
-  
-  // Calculate lines per page
-  const lineHeight = fontSize * 1.5 // Standard line height multiplier
-  const linesPerPage = Math.floor(usableHeight / lineHeight)
-  
-  // Calculate characters per line (approximate)
-  const avgCharWidth = fontSize * 0.6 // Approximate character width
-  const charsPerLine = Math.floor(usableWidth / avgCharWidth)
-  
-  // Total capacity with some safety margin
-  return Math.floor(linesPerPage * charsPerLine * 0.85) // 15% safety margin
-}
-
-/**
- * Handle text overflow by splitting across multiple pages
- * @param {string} fullText - The full text to be distributed
- */
-function handleTextOverflow(fullText) {
+function handleRobustTextDistribution(fullText) {
   const pageCapacity = calculatePageCapacity()
   
-  // Save current page first
+  // If text fits on current page, use normal handling
+  if (fullText.length <= pageCapacity) {
+    handleTextInput()
+    return
+  }
+  
+  // Save current page before redistribution
   saveCurrentPage()
   
-  // Split text into chunks that fit on pages
-  const textChunks = splitTextIntoPages(fullText, pageCapacity)
+  // Split text into optimal chunks
+  const textChunks = splitTextIntoOptimalPages(fullText, pageCapacity)
+  
+  // Ensure we have at least one chunk
+  if (textChunks.length === 0) {
+    textChunks.push(fullText) // Fallback to put everything on one page
+  }
   
   // Clear current page and set first chunk
   textInput.value = textChunks[0]
   pages[currentPageIndex].text = textChunks[0]
   
+  // Remove any existing pages after current (to avoid duplicates)
+  pages.splice(currentPageIndex + 1)
+  
   // Create new pages for remaining chunks
-  let newPagesCount = 0
+  let newPagesCreated = 0
   for (let i = 1; i < textChunks.length; i++) {
-    // Add new page
     pages.push({
       text: textChunks[i],
       settings: getCurrentSettings(),
     })
-    newPagesCount++
+    newPagesCreated++
   }
+  
+  // Verify all text was distributed
+  const totalDistributedText = textChunks.join('')
+  const originalTextLength = fullText.replace(/\s+/g, '').length
+  const distributedTextLength = totalDistributedText.replace(/\s+/g, '').length
   
   // Update UI
   updateCharacterCount()
   updatePreview()
   updatePageUI()
   
-  // Show notification about auto-pagination
-  if (newPagesCount > 0) {
-    showNotification(`Text split across ${textChunks.length} pages (${newPagesCount} new pages created)`, "success")
-  }
+  // Show detailed notification
+  const totalPages = textChunks.length
+  const notification = newPagesCreated > 0 
+    ? `Complete text distributed across ${totalPages} pages (${newPagesCreated} new pages created)`
+    : `Text fits on current page`
+  
+  showNotification(notification, "success")
+  
+  // Log verification for debugging
+  console.log(`Auto-pagination complete:`)
+  console.log(`- Original text: ${originalTextLength} characters`)
+  console.log(`- Distributed text: ${distributedTextLength} characters`)
+  console.log(`- Pages created: ${totalPages}`)
+  console.log(`- Text preservation: ${distributedTextLength === originalTextLength ? 'PERFECT' : 'CHECK NEEDED'}`)
 }
 
 /**
- * Split text into page-sized chunks
+ * Calculate accurate character capacity per page
+ * @returns {number} - Character capacity
+ */
+function calculatePageCapacity() {
+  const fontSize = Number.parseInt(document.getElementById("fontSize").value) || 16
+  const showLines = document.getElementById("showLines").checked
+  const showMargin = document.getElementById("showMargin").checked
+  
+  // Use actual canvas dimensions for more accurate calculation
+  const canvasStyle = outputCanvas.style
+  const canvasWidth = parseInt(canvasStyle.width) || 800
+  const canvasHeight = parseInt(canvasStyle.height) || 600
+  
+  // Calculate usable area with precise measurements
+  const marginOffset = showMargin ? 80 : 30 // More accurate margin calculation
+  const topPadding = 60
+  const bottomPadding = 40
+  const sidePadding = 20
+  
+  const usableWidth = canvasWidth - marginOffset - sidePadding
+  const usableHeight = canvasHeight - topPadding - bottomPadding
+  
+  // More accurate line height calculation (based on actual font rendering)
+  const lineHeight = fontSize * 1.6 // Realistic line height for handwriting
+  const linesPerPage = Math.floor(usableHeight / lineHeight)
+  
+  // More accurate character width calculation (varies by font and size)
+  const avgCharWidth = fontSize * 0.55 // More accurate for handwriting fonts
+  const charsPerLine = Math.floor(usableWidth / avgCharWidth)
+  
+  // Conservative capacity calculation to ensure text fits
+  const baseCapacity = linesPerPage * charsPerLine
+  const safetyMargin = 0.75 // 25% safety margin for realistic text flow
+  
+  const finalCapacity = Math.floor(baseCapacity * safetyMargin)
+  
+  // Ensure minimum capacity (prevent infinite loops with tiny fonts)
+  const minCapacity = 100
+  
+  return Math.max(minCapacity, finalCapacity)
+}
+
+/**
+ * Split text into optimal page-sized chunks with zero text loss
  * @param {string} text - Text to split
  * @param {number} pageCapacity - Characters per page
  * @returns {string[]} - Array of text chunks
  */
-function splitTextIntoPages(text, pageCapacity) {
+function splitTextIntoOptimalPages(text, pageCapacity) {
   const chunks = []
-  let remainingText = text
+  let remainingText = text.trim()
+  let safetyCounter = 0
+  const maxIterations = 1000 // Prevent infinite loops
   
-  while (remainingText.length > 0) {
+  while (remainingText.length > 0 && safetyCounter < maxIterations) {
+    safetyCounter++
+    
     if (remainingText.length <= pageCapacity) {
       // Last chunk fits entirely
       chunks.push(remainingText)
       break
     }
     
-    // Find a good break point (end of sentence, paragraph, or word)
-    let breakPoint = pageCapacity
+    // Find the optimal break point
+    let breakPoint = findOptimalBreakPoint(remainingText, pageCapacity)
     
-    // Try to break at paragraph
-    let paragraphBreak = remainingText.lastIndexOf('\n\n', pageCapacity)
-    if (paragraphBreak > pageCapacity * 0.7) {
-      breakPoint = paragraphBreak + 2
-    } else {
-      // Try to break at sentence
-      let sentenceBreak = remainingText.lastIndexOf('. ', pageCapacity)
-      if (sentenceBreak > pageCapacity * 0.7) {
-        breakPoint = sentenceBreak + 2
-      } else {
-        // Try to break at word
-        let wordBreak = remainingText.lastIndexOf(' ', pageCapacity)
-        if (wordBreak > pageCapacity * 0.8) {
-          breakPoint = wordBreak + 1
-        }
-      }
+    // Ensure we make progress (minimum 10% of capacity)
+    if (breakPoint < pageCapacity * 0.1) {
+      breakPoint = Math.min(pageCapacity, remainingText.length)
     }
     
-    // Extract chunk and continue with remaining text
-    chunks.push(remainingText.substring(0, breakPoint).trim())
+    // Extract chunk
+    const chunk = remainingText.substring(0, breakPoint).trim()
+    if (chunk.length > 0) {
+      chunks.push(chunk)
+    }
+    
+    // Continue with remaining text
     remainingText = remainingText.substring(breakPoint).trim()
   }
   
+  // Safety check: if we hit max iterations, put remaining text in final chunk
+  if (remainingText.length > 0 && safetyCounter >= maxIterations) {
+    chunks.push(remainingText)
+    console.warn('Auto-pagination hit safety limit, added remaining text to final page')
+  }
+  
   return chunks
+}
+
+/**
+ * Find the optimal break point for text splitting
+ * @param {string} text - Text to analyze
+ * @param {number} capacity - Page capacity
+ * @returns {number} - Optimal break point index
+ */
+function findOptimalBreakPoint(text, capacity) {
+  // Priority 1: Double newline (paragraph break) - ideal for readability
+  let paragraphBreak = text.lastIndexOf('\n\n', capacity)
+  if (paragraphBreak > capacity * 0.6) {
+    return paragraphBreak + 2
+  }
+  
+  // Priority 2: Single newline (line break) - good for preserving structure
+  let lineBreak = text.lastIndexOf('\n', capacity)
+  if (lineBreak > capacity * 0.65) {
+    return lineBreak + 1
+  }
+  
+  // Priority 3: Sentence end (. ! ?) - natural reading breaks
+  const sentenceEnders = ['. ', '! ', '? ', '.\n', '!\n', '?\n']
+  let bestSentenceBreak = -1
+  
+  for (const ender of sentenceEnders) {
+    let sentenceBreak = text.lastIndexOf(ender, capacity)
+    if (sentenceBreak > capacity * 0.65 && sentenceBreak > bestSentenceBreak) {
+      bestSentenceBreak = sentenceBreak + ender.length
+    }
+  }
+  
+  if (bestSentenceBreak > 0) {
+    return bestSentenceBreak
+  }
+  
+  // Priority 4: Comma or semicolon - decent breaking points
+  const punctuationBreaks = [', ', '; ', ',\n', ';\n']
+  let bestPunctuationBreak = -1
+  
+  for (const punct of punctuationBreaks) {
+    let punctBreak = text.lastIndexOf(punct, capacity)
+    if (punctBreak > capacity * 0.75 && punctBreak > bestPunctuationBreak) {
+      bestPunctuationBreak = punctBreak + punct.length
+    }
+  }
+  
+  if (bestPunctuationBreak > 0) {
+    return bestPunctuationBreak
+  }
+  
+  // Priority 5: Word boundary - avoid breaking words
+  let wordBreak = text.lastIndexOf(' ', capacity)
+  if (wordBreak > capacity * 0.8) {
+    return wordBreak + 1
+  }
+  
+  // Priority 6: Any whitespace character
+  const whitespaceRegex = /\s/
+  for (let i = capacity - 1; i >= capacity * 0.8; i--) {
+    if (whitespaceRegex.test(text[i])) {
+      return i + 1
+    }
+  }
+  
+  // Fallback: Hard break at capacity (last resort)
+  return Math.min(capacity, text.length)
 }
 
 // ==========================================================================
@@ -661,13 +760,13 @@ function setupCanvas() {
   const container = outputCanvas.parentElement
   const containerRect = container.getBoundingClientRect()
 
-  // Set canvas size based on container with higher base resolution
+  // Set canvas size based on container with ultra-high resolution
   const width = Math.min(1200, containerRect.width - 48)
   const height = Math.min(900, containerRect.height - 48)
 
-  // Use higher DPI scaling for better quality
-  const dpr = Math.max(2, window.devicePixelRatio || 1) // Minimum 2x scaling
-  const scaleFactor = 3 // Additional scaling for premium quality
+  // Ultra-high DPI scaling for maximum quality
+  const dpr = Math.max(3, window.devicePixelRatio || 1) // Minimum 3x scaling
+  const scaleFactor = 8 // Ultra-high scaling for maximum quality (8x instead of 3x)
   
   outputCanvas.width = width * dpr * scaleFactor
   outputCanvas.height = height * dpr * scaleFactor
@@ -676,13 +775,21 @@ function setupCanvas() {
   outputCanvas.style.width = width + "px"
   outputCanvas.style.height = height + "px"
 
-  // Scale context for high DPI and quality
+  // Scale context for ultra-high DPI and maximum quality
   ctx.scale(dpr * scaleFactor, dpr * scaleFactor)
   
-  // Enable high-quality rendering
+  // Enable maximum quality rendering settings
   ctx.imageSmoothingEnabled = true
   ctx.imageSmoothingQuality = 'high'
   ctx.textRenderingOptimization = 'optimizeQuality'
+  
+  // Additional quality enhancements
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.miterLimit = 10
+  
+  // Enable sub-pixel rendering for ultra-crisp text
+  ctx.globalCompositeOperation = 'source-over'
 }
 
 /**
@@ -811,9 +918,22 @@ function createRealisticPaperBackground(width, height) {
  * @param {number} height \
  */
 function drawPaperLines(width, height) {
+  // Calculate proper line width based on canvas scaling
+  const dpr = Math.max(3, window.devicePixelRatio || 1)
+  const scaleFactor = 8
+  const totalScale = dpr * scaleFactor
+  
+  // Save current context
+  ctx.save()
+  
   // More realistic paper line color (slightly faded blue)
   ctx.strokeStyle = "#b8c5d6" 
-  ctx.lineWidth = 0.8
+  // Scale line width to be visible at all zoom levels (minimum 2 pixels scaled)
+  ctx.lineWidth = Math.max(2, 0.8 * totalScale / 12) // Ensure minimum visibility
+  
+  // Use crisp lines for better visibility
+  ctx.lineCap = 'butt'
+  ctx.lineJoin = 'miter'
 
   const lineSpacing = 30
   for (let y = 50; y < height; y += lineSpacing) {
@@ -821,7 +941,8 @@ function drawPaperLines(width, height) {
     
     // Add slight variation to line position for realism
     const lineVariation = (Math.random() - 0.5) * 0.5
-    const actualY = y + lineVariation
+    // Snap to pixel boundaries for crisp lines
+    const actualY = Math.round(y + lineVariation) + 0.5
     
     // Draw line with slight imperfections
     ctx.moveTo(0, actualY)
@@ -843,6 +964,9 @@ function drawPaperLines(width, height) {
     
     ctx.stroke()
   }
+  
+  // Restore context
+  ctx.restore()
 }
 
 /**
@@ -850,9 +974,22 @@ function drawPaperLines(width, height) {
  * @param {number} height - Canvas height
  */
 function drawMargin(height) {
+  // Calculate proper line width based on canvas scaling
+  const dpr = Math.max(3, window.devicePixelRatio || 1)
+  const scaleFactor = 8
+  const totalScale = dpr * scaleFactor
+  
+  // Save current context
+  ctx.save()
+  
   // More realistic margin color (faded red/pink)
   ctx.strokeStyle = "#e8a5a5" 
-  ctx.lineWidth = 1.5
+  // Scale line width to be visible at all zoom levels (minimum 2.5 pixels scaled)
+  ctx.lineWidth = Math.max(2.5, 1.5 * totalScale / 12) // Ensure minimum visibility
+  
+  // Use crisp lines for better visibility
+  ctx.lineCap = 'butt'
+  ctx.lineJoin = 'miter'
   
   ctx.beginPath()
   
@@ -860,20 +997,25 @@ function drawMargin(height) {
   const segments = 10
   const segmentHeight = height / segments
   
-  ctx.moveTo(60, 0)
+  // Snap to pixel boundaries for crisp lines
+  const marginX = Math.round(60) + 0.5
+  ctx.moveTo(marginX, 0)
   
   for (let i = 1; i <= segments; i++) {
     const y = i * segmentHeight
     const xOffset = (Math.random() - 0.5) * 0.8
     
     if (i === segments) {
-      ctx.lineTo(60 + xOffset, height)
+      ctx.lineTo(marginX + xOffset, height)
     } else {
-      ctx.lineTo(60 + xOffset, y)
+      ctx.lineTo(marginX + xOffset, y)
     }
   }
   
   ctx.stroke()
+  
+  // Restore context
+  ctx.restore()
 }
 
 /**
@@ -1136,16 +1278,70 @@ function hidePlaceholder() {
 // ==========================================================================
 
 /**
- * Download the current page as PNG image
+ * Download the current page as ultra-high quality PNG image
  */
 function downloadImage() {
   if (downloadBtn.disabled) return
 
   try {
-    // Create download link
+    // Create ultra-high quality version for download
+    const ultraCanvas = document.createElement("canvas")
+    const ultraCtx = ultraCanvas.getContext("2d")
+    
+    // Ultra-high resolution (8x the display resolution)
+    const ultraScale = 8
+    const displayWidth = parseInt(outputCanvas.style.width)
+    const displayHeight = parseInt(outputCanvas.style.height)
+    
+    ultraCanvas.width = displayWidth * ultraScale
+    ultraCanvas.height = displayHeight * ultraScale
+    
+    // Scale context for ultra-high resolution
+    ultraCtx.scale(ultraScale, ultraScale)
+    
+    // Maximum quality settings
+    ultraCtx.imageSmoothingEnabled = true
+    ultraCtx.imageSmoothingQuality = 'high'
+    ultraCtx.textRenderingOptimization = 'optimizeQuality'
+    ultraCtx.lineCap = 'round'
+    ultraCtx.lineJoin = 'round'
+    
+    // Recreate the current page at ultra-high resolution
+    const currentPage = pages[currentPageIndex]
+    
+    // Clear with white background
+    ultraCtx.fillStyle = "#ffffff"
+    ultraCtx.fillRect(0, 0, displayWidth, displayHeight)
+    
+    // Create ultra-realistic paper background
+    createUltraRealisticPaperBackground(ultraCtx, displayWidth, displayHeight, ultraScale)
+    
+    // Draw paper lines if enabled
+    if (currentPage.settings.showLines) {
+      drawUltraHighQualityPaperLines(ultraCtx, displayWidth, displayHeight, ultraScale)
+    }
+    
+    // Draw margin if enabled
+    if (currentPage.settings.showMargin) {
+      drawUltraHighQualityMargin(ultraCtx, displayHeight, ultraScale)
+    }
+    
+    // Draw ultra-high quality text
+    drawUltraHighQualityText(
+      ultraCtx,
+      currentPage.text,
+      currentPage.settings.fontSize,
+      currentPage.settings.showMargin,
+      displayWidth,
+      displayHeight,
+      currentPage.settings.penColor,
+      ultraScale
+    )
+    
+    // Create download link with maximum quality PNG
     const link = document.createElement("a")
-    link.download = `handwriting-page-${currentPageIndex + 1}-${new Date().getTime()}.png`
-    link.href = outputCanvas.toDataURL("image/png")
+    link.download = `handwriting-ultra-hq-page-${currentPageIndex + 1}-${new Date().getTime()}.png`
+    link.href = ultraCanvas.toDataURL("image/png", 1.0) // Maximum quality
 
     // Trigger download
     document.body.appendChild(link)
@@ -1153,7 +1349,7 @@ function downloadImage() {
     document.body.removeChild(link)
 
     // Show success feedback
-    showNotification("PNG image downloaded successfully!", "success")
+    showNotification("Ultra-high quality PNG image downloaded successfully!", "success")
   } catch (error) {
     console.error("Download failed:", error)
     showNotification("Download failed. Please try again.", "error")
@@ -1174,56 +1370,78 @@ async function generatePDF() {
   pdfBtn.disabled = true
 
   try {
-    showNotification("Generating PDF... Please wait", "info")
+    showNotification("Generating ultra-high quality PDF... Please wait", "info")
 
-    // Create new jsPDF instance
+    // Create new jsPDF instance with maximum quality settings
     const { jsPDF } = window.jspdf
     const pdf = new jsPDF({
       orientation: "portrait",
       unit: "mm",
       format: "a4",
+      compress: false, // Disable compression for maximum quality
+      precision: 16,   // Maximum precision
+      userUnit: 1.0,   // Standard user unit for best quality
     })
 
-    // A4 dimensions in mm
+    // A4 dimensions in mm with optimized margins
     const pageWidth = 210
     const pageHeight = 297
-    const margin = 20
+    const margin = 15  // Reduced margin for more content space
 
-    // Process each page
+    let pageCount = 0
+
+    // Process each page with ultra-high quality
     for (let i = 0; i < pages.length; i++) {
       const page = pages[i]
 
       if (!page.text.trim()) continue // Skip empty pages
 
       // Add new page if not first
-      if (i > 0) {
+      if (pageCount > 0) {
         pdf.addPage()
       }
 
-      // Create canvas for this page
-      const pageCanvas = await generatePageCanvas(page)
+      // Create ultra-high resolution canvas for this page
+      const pageCanvas = await generateUltraHighQualityPageCanvas(page)
 
-      // Convert canvas to image data
-      const imgData = pageCanvas.toDataURL("image/png")
+      // Convert canvas to ultra-high quality image data
+      const imgData = pageCanvas.toDataURL("image/png", 1.0) // Maximum quality PNG
 
-      // Calculate image dimensions to fit page
+      // Calculate image dimensions to fit page with optimal scaling
       const imgWidth = pageWidth - margin * 2
-      const imgHeight = (pageCanvas.height / pageCanvas.width) * imgWidth
+      const aspectRatio = pageCanvas.height / pageCanvas.width
+      const imgHeight = Math.min(imgWidth * aspectRatio, pageHeight - margin * 2 - 15) // Reserve space for page number
 
-      // Add image to PDF
-      pdf.addImage(imgData, "PNG", margin, margin, imgWidth, Math.min(imgHeight, pageHeight - margin * 2))
+      // Add ultra-high quality image to PDF
+      pdf.addImage(
+        imgData, 
+        "PNG", 
+        margin, 
+        margin, 
+        imgWidth, 
+        imgHeight,
+        undefined, // alias
+        "SLOW"     // Use SLOW compression for maximum quality
+      )
 
-      // Add page number
-      pdf.setFontSize(10)
-      pdf.setTextColor(128, 128, 128)
-      pdf.text(`Page ${i + 1}`, pageWidth - margin - 20, pageHeight - 10)
+      // Add professional page number
+      pdf.setFontSize(8)
+      pdf.setTextColor(100, 100, 100)
+      pdf.text(
+        `${pageCount + 1}`, 
+        pageWidth / 2, 
+        pageHeight - 8, 
+        { align: 'center' }
+      )
+
+      pageCount++
     }
 
-    // Save PDF
-    const fileName = `handwriting-${pages.length}-pages-${new Date().getTime()}.pdf`
+    // Save PDF with timestamp
+    const fileName = `handwriting-ultra-hq-${pageCount}-pages-${new Date().getTime()}.pdf`
     pdf.save(fileName)
 
-    showNotification(`PDF with ${pages.length} pages generated successfully!`, "success")
+    showNotification(`Ultra-high quality PDF with ${pageCount} pages generated successfully!`, "success")
   } catch (error) {
     console.error("PDF generation failed:", error)
     showNotification("PDF generation failed. Please try again.", "error")
@@ -1232,6 +1450,346 @@ async function generatePDF() {
     pdfBtn.classList.remove("btn-loading")
     pdfBtn.disabled = false
   }
+}
+
+/**
+ * Generate ultra-high quality canvas for a specific page
+ * @param {Object} page - Page object with text and settings
+ * @returns {Promise<HTMLCanvasElement>} Ultra-high quality canvas element
+ */
+async function generateUltraHighQualityPageCanvas(page) {
+  return new Promise((resolve) => {
+    // Create ultra-high resolution canvas
+    const canvas = document.createElement("canvas")
+    const context = canvas.getContext("2d")
+    
+    // Ultra-high resolution settings (much higher than display)
+    const ultraScale = 16 // 16x resolution for maximum quality
+    const baseWidth = 2480  // A4 width at 300 DPI
+    const baseHeight = 3508 // A4 height at 300 DPI
+    
+    canvas.width = baseWidth * ultraScale
+    canvas.height = baseHeight * ultraScale
+    
+    // Scale context for ultra-high resolution rendering
+    context.scale(ultraScale, ultraScale)
+    
+    // Maximum quality settings
+    context.imageSmoothingEnabled = true
+    context.imageSmoothingQuality = 'high'
+    context.textRenderingOptimization = 'optimizeQuality'
+    context.lineCap = 'round'
+    context.lineJoin = 'round'
+    context.miterLimit = 20
+    context.globalCompositeOperation = 'source-over'
+    
+    // Apply page settings
+    currentFont = page.settings.fontFamily
+    
+    // Clear with white background
+    context.fillStyle = "#ffffff"
+    context.fillRect(0, 0, baseWidth, baseHeight)
+    
+    // Create ultra-realistic paper background
+    createUltraRealisticPaperBackground(context, baseWidth, baseHeight, ultraScale)
+    
+    // Draw paper lines if enabled
+    if (page.settings.showLines) {
+      drawUltraHighQualityPaperLines(context, baseWidth, baseHeight, ultraScale)
+    }
+    
+    // Draw margin if enabled
+    if (page.settings.showMargin) {
+      drawUltraHighQualityMargin(context, baseHeight, ultraScale)
+    }
+    
+    // Draw ultra-high quality text
+    drawUltraHighQualityText(
+      context,
+      page.text,
+      page.settings.fontSize,
+      page.settings.showMargin,
+      baseWidth,
+      baseHeight,
+      page.settings.penColor,
+      ultraScale
+    )
+    
+    // Small delay to ensure rendering completion
+    setTimeout(() => resolve(canvas), 100)
+  })
+}
+
+/**
+ * Create ultra-realistic paper background with maximum quality
+ */
+function createUltraRealisticPaperBackground(context, width, height, scale) {
+  // Ultra-high quality paper texture
+  const textureScale = scale / 4
+  
+  // Create subtle paper grain with ultra-fine detail
+  for (let x = 0; x < width; x += 0.25) { // Ultra-fine sampling
+    for (let y = 0; y < height; y += 0.25) {
+      const noise = Math.random() * 3 + 252 // Very subtle noise
+      context.fillStyle = `rgb(${noise}, ${noise}, ${noise})`
+      context.fillRect(x, y, 0.5, 0.5)
+    }
+  }
+  
+  // Add ultra-subtle paper fibers
+  context.strokeStyle = "rgba(240, 240, 240, 0.3)"
+  context.lineWidth = 0.1
+  
+  for (let i = 0; i < width * height / 5000; i++) {
+    const x = Math.random() * width
+    const y = Math.random() * height
+    const length = Math.random() * 8 + 2
+    const angle = Math.random() * Math.PI * 2
+    
+    context.beginPath()
+    context.moveTo(x, y)
+    context.lineTo(x + Math.cos(angle) * length, y + Math.sin(angle) * length)
+    context.stroke()
+  }
+}
+
+/**
+ * Draw ultra-high quality paper lines
+ * @param {CanvasRenderingContext2D} context - Canvas context
+ * @param {number} width - Canvas width
+ * @param {number} height - Canvas height
+ * @param {number} scale - Ultra-high quality scale factor
+ */
+function drawUltraHighQualityPaperLines(context, width, height, scale) {
+  // Ultra-realistic paper line color (slightly faded blue)
+  context.strokeStyle = "#b8c5d6"
+  context.lineWidth = 0.8 * (scale / 8) // Scale line width appropriately
+  
+  const lineSpacing = 30 * (scale / 8) // Scale line spacing
+  for (let y = 50 * (scale / 8); y < height; y += lineSpacing) {
+    context.beginPath()
+    
+    // Add slight variation to line position for realism
+    const lineVariation = (Math.random() - 0.5) * 0.5 * (scale / 8)
+    const actualY = y + lineVariation
+    
+    // Draw line with slight imperfections
+    context.moveTo(0, actualY)
+    
+    // Add subtle curve to simulate paper imperfections
+    const segments = 12 // More segments for ultra-high quality
+    const segmentWidth = width / segments
+    
+    for (let i = 1; i <= segments; i++) {
+      const x = i * segmentWidth
+      const yOffset = (Math.random() - 0.5) * 0.3 * (scale / 8)
+      
+      if (i === segments) {
+        context.lineTo(width, actualY + yOffset)
+      } else {
+        context.lineTo(x, actualY + yOffset)
+      }
+    }
+    
+    context.stroke()
+  }
+}
+
+/**
+ * Draw ultra-high quality margin line
+ * @param {CanvasRenderingContext2D} context - Canvas context
+ * @param {number} height - Canvas height
+ * @param {number} scale - Ultra-high quality scale factor
+ */
+function drawUltraHighQualityMargin(context, height, scale) {
+  // Ultra-realistic margin color (faded red/pink)
+  context.strokeStyle = "#f0b8c5"
+  context.lineWidth = 0.8 * (scale / 8)
+  
+  const marginX = 80 * (scale / 8) // Scale margin position
+  
+  context.beginPath()
+  context.moveTo(marginX, 0)
+  
+  // Add slight variations for realistic margin line
+  const segments = Math.floor(height / (40 * (scale / 8)))
+  const segmentHeight = height / segments
+  
+  for (let i = 1; i <= segments; i++) {
+    const y = i * segmentHeight
+    const xOffset = (Math.random() - 0.5) * 0.5 * (scale / 8)
+    
+    if (i === segments) {
+      context.lineTo(marginX + xOffset, height)
+    } else {
+      context.lineTo(marginX + xOffset, y)
+    }
+  }
+  
+  context.stroke()
+}
+
+/**
+ * Draw ultra-high quality text with maximum realism
+ */
+function drawUltraHighQualityText(context, text, fontSize, showMargin, width, height, penColor, scale) {
+  // Scale font size for ultra-high resolution
+  const scaledFontSize = fontSize * (scale / 8)
+  
+  const lines = text.split("\n")
+  const baseLineHeight = scaledFontSize * 1.6
+  const startX = showMargin ? 120 : 30
+  const maxWidth = width - startX - 30
+  let currentY = 100
+  
+  // Ultra-realistic writing characteristics
+  let writingPressure = 0.85 + Math.random() * 0.15
+  let handTiredness = 0
+  let baselineSlant = (Math.random() - 0.5) * 0.002
+  
+  lines.forEach((line, lineIndex) => {
+    if (line.trim() === "") {
+      currentY += baseLineHeight
+      return
+    }
+    
+    const words = line.split(" ")
+    let currentLine = ""
+    let lineWords = []
+    
+    // Group words into lines
+    words.forEach((word) => {
+      const testLine = currentLine + word + " "
+      context.font = `${scaledFontSize}px ${currentFont.replace(/'/g, "")}`
+      const metrics = context.measureText(testLine)
+      
+      if (metrics.width > maxWidth && currentLine !== "") {
+        lineWords.push(currentLine.trim())
+        currentLine = word + " "
+      } else {
+        currentLine = testLine
+      }
+    })
+    
+    if (currentLine.trim() !== "") {
+      lineWords.push(currentLine.trim())
+    }
+    
+    // Draw each line with ultra-realistic effects
+    lineWords.forEach((lineText, wordLineIndex) => {
+      if (currentY > height - 60) return
+      
+      drawUltraRealisticLine(
+        context, 
+        lineText, 
+        startX, 
+        currentY, 
+        scaledFontSize, 
+        penColor, 
+        writingPressure, 
+        handTiredness, 
+        baselineSlant,
+        scale
+      )
+      currentY += baseLineHeight + (Math.random() - 0.5) * 6
+      
+      handTiredness += 0.001
+      writingPressure = Math.max(0.7, writingPressure - 0.002)
+    })
+  })
+}
+
+/**
+ * Draw ultra-realistic line with maximum human-like variations
+ */
+function drawUltraRealisticLine(context, text, x, y, fontSize, penColor, pressure, tiredness, slant, scale) {
+  const words = text.split(' ')
+  let currentX = x
+  
+  words.forEach((word, wordIndex) => {
+    const wordBaseline = y + (Math.random() - 0.5) * 3
+    const wordSlant = slant + (Math.random() - 0.5) * 0.001
+    
+    for (let i = 0; i < word.length; i++) {
+      const char = word[i]
+      
+      // Ultra-realistic character variations
+      const humanVariations = {
+        xOffset: (Math.random() - 0.5) * 1.8,
+        yOffset: (Math.random() - 0.5) * 2.2 + tiredness * 8,
+        scaleX: 0.90 + Math.random() * 0.20,
+        scaleY: 0.92 + Math.random() * 0.16,
+        rotation: wordSlant + (Math.random() - 0.5) * 0.025,
+        alpha: Math.max(0.70, pressure + (Math.random() - 0.5) * 0.20),
+        fontSizeVar: fontSize * (0.94 + Math.random() * 0.12)
+      }
+      
+      // Apply ultra-realistic character rendering
+      context.save()
+      
+      context.globalAlpha = humanVariations.alpha
+      
+      const charX = currentX + humanVariations.xOffset
+      const charY = wordBaseline + humanVariations.yOffset
+      
+      context.translate(charX, charY)
+      context.rotate(humanVariations.rotation)
+      context.scale(humanVariations.scaleX, humanVariations.scaleY)
+      
+      context.font = `${humanVariations.fontSizeVar}px ${currentFont.replace(/'/g, "")}`
+      context.fillStyle = createUltraRealisticInkVariation(penColor, pressure, scale)
+      context.textBaseline = "top"
+      
+      context.fillText(char, 0, 0)
+      
+      context.restore()
+      
+      // Natural character spacing
+      context.font = `${fontSize}px ${currentFont.replace(/'/g, "")}`
+      const charWidth = context.measureText(char).width
+      const naturalSpacing = charWidth * (0.93 + Math.random() * 0.14)
+      currentX += naturalSpacing
+    }
+    
+    // Natural word spacing
+    if (wordIndex < words.length - 1) {
+      context.font = `${fontSize}px ${currentFont.replace(/'/g, "")}`
+      const spaceWidth = context.measureText(' ').width * (0.7 + Math.random() * 0.6)
+      currentX += spaceWidth
+    }
+  })
+}
+
+/**
+ * Create ultra-realistic ink color variations
+ */
+function createUltraRealisticInkVariation(baseColor, pressure, scale) {
+  let r, g, b
+  
+  if (baseColor.startsWith('#')) {
+    const hex = baseColor.slice(1)
+    r = parseInt(hex.slice(0, 2), 16)
+    g = parseInt(hex.slice(2, 4), 16)
+    b = parseInt(hex.slice(4, 6), 16)
+  } else if (baseColor.startsWith('rgb')) {
+    const matches = baseColor.match(/\d+/g)
+    r = parseInt(matches[0])
+    g = parseInt(matches[1])
+    b = parseInt(matches[2])
+  } else {
+    return baseColor
+  }
+  
+  // Ultra-realistic ink variations
+  const pressureEffect = pressure * 20
+  const naturalVariation = (Math.random() - 0.5) * 12
+  const qualityEffect = scale * 0.5 // Enhanced for ultra-high resolution
+  
+  r = Math.max(0, Math.min(255, r + pressureEffect + naturalVariation + qualityEffect))
+  g = Math.max(0, Math.min(255, g + pressureEffect + naturalVariation + qualityEffect))
+  b = Math.max(0, Math.min(255, b + pressureEffect + naturalVariation + qualityEffect))
+  
+  return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`
 }
 
 /**
@@ -1804,28 +2362,3 @@ function drawTextWithVariationsForPDF(context, text, x, y, settings) {
   context.restore()
 }
 
-// ==========================================================================
-// CONSOLE WELCOME MESSAGE
-// ==========================================================================
-
-console.log(`
-✍️ Enhanced Text to Handwriting Converter v1.0
-===============================================
-
-New Features:
-• 🌙 Enhanced dark mode with proper paper colors
-• 📄 Multi-page support with navigation
-• 📋 PDF generation for all pages
-• ⌨️  Extended keyboard shortcuts
-
-Keyboard shortcuts:
-• Ctrl/Cmd + D: Toggle dark mode
-• Ctrl/Cmd + S: Download PNG
-• Ctrl/Cmd + P: Generate PDF
-• Ctrl/Cmd + K: Clear text
-• Ctrl/Cmd + N: New page
-• Ctrl/Cmd + ←/→: Navigate pages
-
-GitHub: https://github.com/yadavnikhil03/text-to-handwriting
-Made with ❤️ by Nikhil Yadav
-`)
