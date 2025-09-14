@@ -112,6 +112,8 @@
 html {
     scroll-behavior: smooth;
     font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 body {
@@ -122,6 +124,48 @@ body {
     transition: background-color var(--transition-normal), color var(--transition-normal);
     overflow-x: hidden;
     min-height: 100vh;
+}
+
+/* Performance optimizations */
+.output-canvas,
+.paper-background,
+.style-preview {
+    will-change: transform;
+}
+
+img {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Cross-browser compatibility */
+input[type="range"] {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+}
+
+input[type="color"] {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+}
+
+button {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+}
+
+/* Prevent text selection on UI elements */
+.btn,
+.style-option,
+.page-nav-btn,
+.toggle-switch {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
 }
 
 /* ==========================================================================

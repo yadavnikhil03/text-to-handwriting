@@ -7,28 +7,58 @@
     <meta name="description" content="Transform your digital text into beautiful handwritten notes. Free, fast, and easy to use text-to-handwriting converter with multiple styles and PDF generation.">
     <meta name="keywords" content="text to handwriting, handwriting generator, convert text, digital handwriting, handwritten notes, PDF generator">
     <meta name="author" content="Nikhil Yadav">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#6366f1">
     
     <!-- Open Graph Meta Tags -->
     <meta property="og:title" content="Text to Handwriting Converter">
     <meta property="og:description" content="Transform your digital text into beautiful handwritten notes with PDF generation">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://yadavnikhil03.github.io/text-to-handwriting">
+    <meta property="og:image" content="https://yadavnikhil03.github.io/text-to-handwriting/preview.png">
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Text to Handwriting Converter">
+    <meta name="twitter:description" content="Transform your digital text into beautiful handwritten notes">
+    
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://yadavnikhil03.github.io/text-to-handwriting">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="./manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Handwriting">
     
     <!-- Favicon -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✍️</text></svg>">
     
-    <!-- Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Homemade+Apple&family=Caveat:wght@400;600&family=Liu+Jian+Mao+Cao&family=Dancing+Script:wght@400;600&display=swap" rel="stylesheet">
+    <!-- Fonts with preload for critical fonts -->
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap"></noscript>
+    <link href="https://fonts.googleapis.com/css2?family=Homemade+Apple&family=Caveat:wght@400;600&family=Liu+Jian+Mao+Cao&family=Dancing+Script:wght@400;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Homemade+Apple&family=Caveat:wght@400;600&family=Liu+Jian+Mao+Cao&family=Dancing+Script:wght@400;600&display=swap"></noscript>
     
-    <!-- CSS -->
-    <link rel="stylesheet" href="./css/index.css">
+    <!-- CSS with critical path optimization -->
+    <style>
+        /* Critical CSS - Above the fold styles */
+        :root{--color-primary:#6366f1;--bg-primary:#ffffff;--text-primary:#1e293b;--font-family-primary:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}[data-theme="dark"]{--bg-primary:#0f172a;--text-primary:#f1f5f9}*{box-sizing:border-box;margin:0;padding:0}body{font-family:var(--font-family-primary);color:var(--text-primary);background:var(--bg-primary);line-height:1.6}.header{background:var(--bg-primary);border-bottom:1px solid #e2e8f0;position:sticky;top:0;z-index:100}.container{max-width:1200px;margin:0 auto;padding:0 1rem}
+    </style>
+    <link rel="stylesheet" href="./css/index.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="./css/index.css"></noscript>
     
-    <!-- PDF Generation Library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- PDF Generation Library with async loading -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" async></script>
 </head>
 <body>
+    <!-- Preloader for better UX -->
+    <div id="preloader" style="position:fixed;top:0;left:0;width:100%;height:100%;background:var(--bg-primary);display:flex;align-items:center;justify-content:center;z-index:9999;opacity:1;transition:opacity 0.3s ease">
+        <div style="text-align:center">
+            <div style="font-size:2rem;margin-bottom:1rem">✍️</div>
+            <div style="color:var(--text-primary)">Loading...</div>
+        </div>
+    </div>
     <!-- Header -->
     <header class="header">
         <div class="container">
@@ -65,13 +95,15 @@
                         <!-- Text Input Area -->
                         <div class="text-input-container">
                             <div class="paper-background">
-                                <div class="paper-lines" id="paperLines"></div>
-                                <div class="paper-margin" id="paperMargin"></div>
+                                <div class="paper-lines" id="paperLines" aria-hidden="true"></div>
+                                <div class="paper-margin" id="paperMargin" aria-hidden="true"></div>
                                 <textarea 
                                     id="textInput" 
                                     class="text-input" 
                                     placeholder="Type your text here in regular font... It will be converted to handwriting on the right side!"
                                     spellcheck="false"
+                                    aria-label="Text input for handwriting conversion"
+                                    rows="10"
                                 ></textarea>
                             </div>
                         </div>
@@ -148,10 +180,10 @@
                             Handwriting Output
                         </h2>
                     </div>
-                    <div class="output-content" id="outputContent">
-                        <canvas id="outputCanvas" class="output-canvas" style="display: none;"></canvas>
+                    <div class="output-content" id="outputContent" role="img" aria-label="Handwriting preview">
+                        <canvas id="outputCanvas" class="output-canvas" style="display: none;" role="img" aria-label="Generated handwriting"></canvas>
                         <div class="output-placeholder" id="outputPlaceholder">
-                            <div class="placeholder-icon">✍️</div>
+                            <div class="placeholder-icon" aria-hidden="true">✍️</div>
                             <p class="placeholder-text">Your handwriting will appear here</p>
                             <p class="placeholder-subtext">Start typing to see the magic happen!</p>
                         </div>
@@ -211,7 +243,26 @@
         </div>
     </footer>
 
-    <!-- JavaScript -->
-    <script src="./js/script.js"></script>
+    <!-- JavaScript with performance optimization -->
+    <script src="./js/script.js" defer></script>
+    <script>
+        // Hide preloader when page is fully loaded
+        window.addEventListener('load', function() {
+            const preloader = document.getElementById('preloader');
+            if (preloader) {
+                preloader.style.opacity = '0';
+                setTimeout(() => preloader.remove(), 300);
+            }
+        });
+        
+        // Service Worker Registration for PWA capabilities
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/sw.js').catch(function(err) {
+                    // Silent fail - not critical
+                });
+            });
+        }
+    </script>
 </body>
 </html>

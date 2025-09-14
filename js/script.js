@@ -36,7 +36,6 @@ function initializeApp() {
   setTimeout(() => {
     runComprehensiveFunctionalityTest()
   }, 1000)
-  console.log("Enhanced Text to Handwriting Converter v1.0 initialized successfully")
 }
 function setupEventListeners() {
   textInput.addEventListener("input", handleTextInput)
@@ -340,11 +339,6 @@ function handleRobustTextDistribution(fullText) {
     ? `Complete text distributed across ${totalPages} pages (${newPagesCreated} new pages created)`
     : `Text fits on current page`
   showNotification(notification, "success")
-  console.log(`Auto-pagination complete:`)
-  console.log(`- Original text: ${originalTextLength} characters`)
-  console.log(`- Distributed text: ${distributedTextLength} characters`)
-  console.log(`- Pages created: ${totalPages}`)
-  console.log(`- Text preservation: ${distributedTextLength === originalTextLength ? 'PERFECT' : 'CHECK NEEDED'}`)
 }
 /**
  * Calculate accurate character capacity per page
@@ -877,7 +871,9 @@ function downloadImage() {
     document.body.removeChild(link)
     showNotification("Image downloaded", "success")
   } catch (error) {
-    console.error("Download failed:", error)
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      console.error("Download failed:", error)
+    }
     showNotification("Download failed", "error")
   }
 }
@@ -939,7 +935,9 @@ async function generatePDF() {
     pdf.save(fileName)
     showNotification(`PDF ready (${pageCount} pages)`, "success")
   } catch (error) {
-    console.error("PDF generation failed:", error)
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      console.error("PDF generation failed:", error)
+    }
     showNotification("PDF failed", "error")
   } finally {
     pdfBtn.classList.remove("btn-loading")
@@ -1240,7 +1238,13 @@ function debounce(func, wait) {
   return function executedFunction(...args) {
     const later = () => {
       clearTimeout(timeout)
-      func(...args)
+      try {
+        func(...args)
+      } catch (error) {
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+          console.error("Debounced function error:", error)
+        }
+      }
     }
     clearTimeout(timeout)
     timeout = setTimeout(later, wait)
@@ -1337,7 +1341,6 @@ function showNotification(message, type = "info") {
  * Run comprehensive functionality test
  */
 function runComprehensiveFunctionalityTest() {
-  console.log("🧪 Running Comprehensive Functionality Test...")
   const tests = [
     testTextInput,
     testHandwritingStyles,
@@ -1348,26 +1351,24 @@ function runComprehensiveFunctionalityTest() {
     testKeyboardShortcuts,
     testResponsiveDesign,
   ]
+  
   let passedTests = 0
   const totalTests = tests.length
-  tests.forEach((test, index) => {
+  
+  tests.forEach((test) => {
     try {
       const result = test()
       if (result) {
-        console.log(`✅ Test ${index + 1}: ${test.name} - PASSED`)
         passedTests++
-      } else {
-        console.log(`❌ Test ${index + 1}: ${test.name} - FAILED`)
       }
     } catch (error) {
-      console.log(`❌ Test ${index + 1}: ${test.name} - ERROR:`, error.message)
+      // Silent failure in production
     }
   })
-  console.log(`\n📊 Test Results: ${passedTests}/${totalTests} tests passed`)
-  if (passedTests === totalTests) {
-    console.log("✅ All functionality tests passed!")
-  } else {
-    console.log(`⚠️ ${totalTests - passedTests} tests failed. Check console for details.`)
+  
+  // Only log in development
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    console.log(`Test Results: ${passedTests}/${totalTests} tests passed`)
   }
 }
 function testTextInput() {
